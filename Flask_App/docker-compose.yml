@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  translator-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - TRANSFORMERS_CACHE=/app/models
+    volumes:
+      - ./templates:/app/templates
+      - model-cache:/app/models
+    restart: unless-stopped
+
+volumes:
+  model-cache:
+    driver: local
+
+# Nếu cần, có thể thêm dịch vụ logging hoặc monitoring
+# logs:
+#   image: graylog/graylog:4.2
+#   ports:
+#     - "9000:9000"
+#     - "12201:12201/udp" 
