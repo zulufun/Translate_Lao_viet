@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from transformers import T5ForConditionalGeneration, T5Tokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import torch
 import logging
 from functools import lru_cache
@@ -11,9 +11,9 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class LaoVietnameseTranslator:
+class LanguageTranslator:
     def __init__(self):
-        self.model_name = "minhtoan/t5-translate-lao-vietnamese"
+        self.model_name = "facebook/nllb-200-distilled-600M"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = None
         self.tokenizer = None
@@ -23,8 +23,8 @@ class LaoVietnameseTranslator:
         """Tải model và tokenizer"""
         try:
             logger.info(f"Đang tải model {self.model_name}...")
-            self.tokenizer = T5Tokenizer.from_pretrained(self.model_name)
-            self.model = T5ForConditionalGeneration.from_pretrained(self.model_name)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
             logger.info("Model đã được tải thành công!")
@@ -33,18 +33,19 @@ class LaoVietnameseTranslator:
             raise e
     
     @lru_cache(maxsize=100)
-    def translate(self, text, max_length=512):
-        """Dịch text từ tiếng Lào sang tiếng Việt"""
+    def translate(self, text, source_lang='lao', target_lang='vie', max_length=512):
+        """Dịch text giữa các ngôn ngữ"""
         if not text or not text.strip():
             return ""
         
         try:
-            # Tiền xử lý text
-            input_text = f"translate Lao to Vietnamese: {text.strip()}"
+            # Mã ngôn ngữ theo chuẩn NLLB
+            source_code = 'lao_Laoo'
+            target_code = 'vie_Latn'
             
             # Tokenize
             inputs = self.tokenizer(
-                input_text,
+                text,
                 return_tensors="pt",
                 max_length=max_length,
                 truncation=True,
@@ -55,6 +56,7 @@ class LaoVietnameseTranslator:
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
+                    forced_bos_token_id=self.tokenizer.lang_code_to_id[target_code],
                     max_length=max_length,
                     num_beams=4,
                     length_penalty=0.6,
@@ -71,7 +73,7 @@ class LaoVietnameseTranslator:
             return f"Lỗi: Không thể dịch văn bản này"
 
 # Khởi tạo translator
-translator = LaoVietnameseTranslator()
+translator = LanguageTranslator()
 
 @app.route('/')
 def index():
@@ -84,6 +86,8 @@ def translate_text():
     try:
         data = request.get_json()
         text = data.get('text', '').strip()
+        source_lang = data.get('source_lang', 'lao')
+        target_lang = data.get('target_lang', 'vie')
         
         if not text:
             return jsonify({'error': 'Vui lòng nhập văn bản cần dịch'}), 400
@@ -93,7 +97,7 @@ def translate_text():
             return jsonify({'error': 'Văn bản quá dài (tối đa 1000 ký tự)'}), 400
         
         # Dịch
-        translated = translator.translate(text)
+        translated = translator.translate(text, source_lang, target_lang)
         
         return jsonify({
             'original': text,
