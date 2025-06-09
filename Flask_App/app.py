@@ -4,6 +4,10 @@ import torch
 import logging
 from functools import lru_cache
 import os
+import sys
+
+# Thêm đường dẫn tới thư mục fine-tune
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'fine-turn')))
 
 app = Flask(__name__)
 
@@ -12,9 +16,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class LanguageTranslator:
-    def __init__(self):
-        self.model_name = "facebook/nllb-200-distilled-600M"
+    def __init__(self, model_path="../fine-turn/lao_vie_translation_model"):
+        """
+        Khởi tạo translator với model fine-tune
+        
+        :param model_path: Đường dẫn tới model đã fine-tune
+        """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_name = "facebook/nllb-200-distilled-600M"
+        self.model_path = model_path
         self.model = None
         self.tokenizer = None
         self.load_model()
@@ -22,11 +32,18 @@ class LanguageTranslator:
     def load_model(self):
         """Tải model và tokenizer"""
         try:
-            logger.info(f"Đang tải model {self.model_name}...")
+            logger.info(f"Đang tải model từ {self.model_path}...")
+            
+            # Tokenizer gốc
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+            
+            # Model fine-tune
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_path)
+            
+            # Chuyển model sang device
             self.model.to(self.device)
             self.model.eval()
+            
             logger.info("Model đã được tải thành công!")
         except Exception as e:
             logger.error(f"Lỗi khi tải model: {e}")
@@ -115,7 +132,8 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'model_loaded': translator.model is not None,
-        'device': str(translator.device)
+        'device': str(translator.device),
+        'model_path': translator.model_path
     })
 
 if __name__ == '__main__':
